@@ -1,11 +1,18 @@
 {
     "name": "api-relay",
     "version": "0.1.0",
+    "description": "A bridge to connect and relay data between various AI providers through browser extensions",
+    "main": "dist/server.js",
     "private": true,
     "scripts": {
         "dev": "nodemon --exec ts-node src/server.ts",
         "build": "tsc",
-        "start": "node dist/server.js"
+        "start": "node dist/server.js",
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "test:integration": "node scripts/run_integration_test.js",
+        "lint": "eslint . --ext .ts",
+        "lint:fix": "eslint . --ext .ts --fix",
+        "mock:test": "node scripts/mock_extension_client.js"
     },
     "dependencies": {
         "body-parser": "^1.20.2",
@@ -15,6 +22,29 @@
         "uuid": "^9.0.0",
         "ws": "^8.13.0",
         "zod": "^3.23.0"
+    },
+    "keywords": [
+        "ai",
+        "chatgpt",
+        "perplexity",
+        "relay",
+        "bridge",
+        "api",
+        "browser-extension",
+        "websocket"
+    ],
+    "author": "d-osc",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/d-osc/API-relay.git"
+    },
+    "bugs": {
+        "url": "https://github.com/d-osc/API-relay/issues"
+    },
+    "homepage": "https://github.com/d-osc/API-relay#readme",
+    "engines": {
+        "node": ">=16.0.0"
     },
     "devDependencies": {
         "@types/cors": "^2.8.19",
