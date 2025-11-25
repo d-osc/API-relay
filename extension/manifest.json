@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "Chat Relay Extension",
+  "version": "1.0.0",
+  "description": "Relay messages between API server and AI chat interfaces",
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://claude.ai/*",
+    "https://www.perplexity.ai/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://www.perplexity.ai/*"
+      ],
+      "js": [
+        "providers/chatgpt.js",
+        "providers/perplexity.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://www.perplexity.ai/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_end",
+      "world": "ISOLATED"
+    }
+  ],
+  "action": {
+    "default_title": "Chat Relay Status"
+  }
+}
