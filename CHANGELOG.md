@@ -67,5 +67,5 @@ From v1.0.0 to v1.1.0:
 ### Breaking Changes
 
 - **Authorization Required**: All API endpoints now require an API key in the Authorization header
-  - Before: `curl -X POST http://localhost:8647/openai/v1/chat/completions`
-  - After: `curl -X POST http://localhost:8647/openai/v1/chat/completions -H "Authorization: Bearer <API_KEY>"`
+  - Before: `curl -X POST http://localhost:8637/openai/v1/chat/completions`
+  - After: `curl -X POST http://localhost:8637/openai/v1/chat/completions -H "Authorization: Bearer <API_KEY>"`

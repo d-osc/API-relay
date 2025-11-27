@@ -16,7 +16,7 @@ import OpenAI from 'openai';
 
 // Configuration
 const API_KEY = process.env.API_RELAY_API_KEY || 'your_api_key_here';
-const BASE_URL = 'http://localhost:8647/openai/v1';
+const BASE_URL = 'http://localhost:8637/openai/v1';
 
 // Validate API key
 if (API_KEY === 'your_api_key_here') {
@@ -119,7 +119,7 @@ async function main() {
   } catch (error) {
     console.error(`Error: ${error.message}`);
     console.error('\nTroubleshooting:');
-    console.error('1. Make sure API Relay server is running on port 8647');
+    console.error('1. Make sure API Relay server is running on port 8637');
     console.error('2. Check that your browser extension is loaded and connected');
     console.error('3. Verify your API key is valid');
     console.error('4. Ensure you\'re logged into ChatGPT in your browser');

@@ -6,7 +6,7 @@
   // Configuration
   // ========================
   const CONFIG = {
-    WS_URL: 'ws://localhost:8647/ws',
+    WS_URL: 'ws://localhost:8637/ws',
     INITIAL_BACKOFF: 1000,
     MAX_BACKOFF: 60000,
     BACKOFF_MULTIPLIER: 1.5,

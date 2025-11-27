@@ -19,7 +19,7 @@ import sys
 def main():
     # Configuration
     API_KEY = os.getenv("API_RELAY_API_KEY", "your_api_key_here")
-    BASE_URL = "http://localhost:8647/openai/v1"
+    BASE_URL = "http://localhost:8637/openai/v1"
     
     # Validate API key
     if API_KEY == "your_api_key_here":
@@ -102,7 +102,7 @@ def main():
     except Exception as e:
         print(f"Error: {e}")
         print("\nTroubleshooting:")
-        print("1. Make sure API Relay server is running on port 8647")
+        print("1. Make sure API Relay server is running on port 8637")
         print("2. Check that your browser extension is loaded and connected")
         print("3. Verify your API key is valid")
         print("4. Ensure you're logged into ChatGPT in your browser")

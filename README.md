@@ -102,7 +102,7 @@ npm start
 
 ```bash
 # ส่งข้อความไปยัง ChatGPT (ต้องระบุ Authorization header)
-curl -X POST http://localhost:8647/openai/v1/chat/completions \
+curl -X POST http://localhost:8637/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $OPENAI_API_KEY" \
   -d '{
@@ -113,7 +113,7 @@ curl -X POST http://localhost:8647/openai/v1/chat/completions \
   }'
 
 # หรือใช้กับ Anthropic API
-curl -X POST http://localhost:8647/anthropic/v1/messages \
+curl -X POST http://localhost:8637/anthropic/v1/messages \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $ANTHROPIC_API_KEY" \
   -d '{
@@ -128,7 +128,7 @@ curl -X POST http://localhost:8647/anthropic/v1/messages \
 
 ```javascript
 // ส่งข้อความไปยัง AI (ต้องระบุ Authorization header)
-fetch('http://localhost:8647/openai/v1/chat/completions', {
+fetch('http://localhost:8637/openai/v1/chat/completions', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -155,7 +155,7 @@ from openai import OpenAI
 # สร้าง client ที่ชี้ไปยัง API Relay
 client = OpenAI(
     api_key="your_api_key_here",
-    base_url="http://localhost:8647/openai/v1"
+    base_url="http://localhost:8637/openai/v1"
 )
 
 # ส่งข้อความ
@@ -177,7 +177,7 @@ import OpenAI from 'openai';
 // สร้าง client ที่ชี้ไปยัง API Relay
 const openai = new OpenAI({
   apiKey: 'your_api_key_here',
-  baseURL: 'http://localhost:8647/openai/v1'
+  baseURL: 'http://localhost:8637/openai/v1'
 });
 
 async function main() {
@@ -198,7 +198,7 @@ main();
 
 ```javascript
 // ส่งข้อความแบบสตรีม (ต้องระบุ Authorization header)
-fetch('http://localhost:8647/openai/v1/chat/completions', {
+fetch('http://localhost:8637/openai/v1/chat/completions', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -239,7 +239,7 @@ from openai import OpenAI
 
 client = OpenAI(
     api_key="your_api_key_here",
-    base_url="http://localhost:8647/openai/v1"
+    base_url="http://localhost:8637/openai/v1"
 )
 
 stream = client.chat.completions.create(
@@ -261,7 +261,7 @@ import OpenAI from 'openai';
 
 const openai = new OpenAI({
   apiKey: 'your_api_key_here',
-  baseURL: 'http://localhost:8647/openai/v1'
+  baseURL: 'http://localhost:8637/openai/v1'
 });
 
 async function streamingExample() {
@@ -320,7 +320,7 @@ streamingExample();
 ```typescript
 export const settings = {
   // เปลี่ยนพอร์ตเซิร์ฟเวอร์
-  port: process.env.PORT || 8647,
+  port: process.env.PORT || 8637,
   
   // การตั้งค่าอื่นๆ
   timeout: 180000, // 3 นาที
@@ -337,7 +337,7 @@ API Relay มีระบบจัดการ API key แบบสร้าง�
 
 ```bash
 # สร้าง API key ใหม่ (มีวันหมดอายุ)
-curl -X POST http://localhost:8647/api-keys \
+curl -X POST http://localhost:8637/api-keys \
   -H "Content-Type: application/json" \
   -d '{
     "name": "My Application",
@@ -345,7 +345,7 @@ curl -X POST http://localhost:8647/api-keys \
   }'
 
 # สร้าง API key ใหม่ (ไม่มีวันหมดอายุ)
-curl -X POST http://localhost:8647/api-keys \
+curl -X POST http://localhost:8637/api-keys \
   -H "Content-Type: application/json" \
   -d '{
     "name": "My Permanent Application"
@@ -367,17 +367,17 @@ curl -X POST http://localhost:8647/api-keys \
 
 ```bash
 # ดูรายการ API keys ทั้งหมด
-curl -X GET http://localhost:8647/api-keys
+curl -X GET http://localhost:8637/api-keys
 
 # อัปเดต API key
-curl -X PUT http://localhost:8647/api-keys/550e8400-e29b-41d4-a716-446655440000 \
+curl -X PUT http://localhost:8637/api-keys/550e8400-e29b-41d4-a716-446655440000 \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Updated Application Name"
   }'
 
 # ลบ/เพิกถอน API key
-curl -X DELETE http://localhost:8647/api-keys/550e8400-e29b-41d4-a716-446655440000
+curl -X DELETE http://localhost:8637/api-keys/550e8400-e29b-41d4-a716-446655440000
 ```
 
 ### การใช้งาน API Key
@@ -386,7 +386,7 @@ curl -X DELETE http://localhost:8647/api-keys/550e8400-e29b-41d4-a716-4466554400
 
 ```bash
 # ใช้กับ cURL
-curl -X POST http://localhost:8647/openai/v1/chat/completions \
+curl -X POST http://localhost:8637/openai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ak-5f3a4b1c2d6e8f9a1b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5" \
   -d '{

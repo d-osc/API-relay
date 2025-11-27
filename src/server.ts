@@ -848,7 +848,7 @@ app.delete("/api-keys/:id", (req, res) => {
 });
 
 // == Start server ==
-const PORT = process.env.PORT ? Number(process.env.PORT) : 8647;
+const PORT = process.env.PORT ? Number(process.env.PORT) : 8637;
 server.listen(PORT, () => {
   console.log("=".repeat(60));
   console.log(`🚀 Chat Relay API Server`);

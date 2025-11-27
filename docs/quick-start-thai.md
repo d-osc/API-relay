@@ -53,11 +53,11 @@ npm install
 npm run dev
 ```
 
-เซิร์ฟเวอร์จะเริ่มทำงานบนพอร์ต 8647 (หรือตามที่ระบุในไฟล์ตั้งค่า)
+เซิร์ฟเวอร์จะเริ่มทำงานบนพอร์ต 8637 (หรือตามที่ระบุในไฟล์ตั้งค่า)
 
 ### 2.2 การตรวจสอบการทำงานของเซิร์ฟเวอร์
 
-เปิดเบราว์เซอร์และไปที่ `http://localhost:8647` เพื่อตรวจสอบว่าเซิร์ฟเวอร์ทำงานอย่างถูกต้อง
+เปิดเบราว์เซอร์และไปที่ `http://localhost:8637` เพื่อตรวจสอบว่าเซิร์ฟเวอร์ทำงานอย่างถูกต้อง
 
 ## ขั้นตอนที่ 3: การเชื่อมต่อกับผู้ให้บริการ AI
 
@@ -83,7 +83,7 @@ npm run dev
 
 ```bash
 # ทดสอบส่งข้อความไปยัง ChatGPT
-curl -X POST http://localhost:8647/v1/chat/completions \
+curl -X POST http://localhost:8637/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-3.5-turbo",
@@ -99,7 +99,7 @@ curl -X POST http://localhost:8647/v1/chat/completions \
 
 ```javascript
 // ตัวอย่างการใช้งานกับ JavaScript
-fetch('http://localhost:8647/v1/chat/completions', {
+fetch('http://localhost:8637/v1/chat/completions', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json'
@@ -123,7 +123,7 @@ fetch('http://localhost:8647/v1/chat/completions', {
 
 ```javascript
 // ตัวอย่างการใช้งานแบบสตรีม
-fetch('http://localhost:8647/v1/chat/completions', {
+fetch('http://localhost:8637/v1/chat/completions', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json'

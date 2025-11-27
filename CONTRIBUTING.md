@@ -83,11 +83,11 @@ API-relay/
 
 ### Default Configuration
 
-- **Server Port**: 8647 (configurable via `PORT` environment variable)
+- **Server Port**: 8637 (configurable via `PORT` environment variable)
 - **API Endpoints**: 
-  - OpenAI Compatible: `http://localhost:8647/openai/v1/chat/completions`
-  - Anthropic Compatible: `http://localhost:8647/anthropic/v1/messages`
-  - API Key Management: `http://localhost:8647/api-keys`
+  - OpenAI Compatible: `http://localhost:8637/openai/v1/chat/completions`
+  - Anthropic Compatible: `http://localhost:8637/anthropic/v1/messages`
+  - API Key Management: `http://localhost:8637/api-keys`
 
 ## How to Contribute
 
