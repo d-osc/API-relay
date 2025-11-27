@@ -1,9 +1,20 @@
 export interface OpenAIChatRequestBody {
     model?: string;
-    messages: Array<{ role: string; content: string }>;
+    messages: Array<{ role: string; content: string; name?: string }>;
     temperature?: number;
-    max_tokens?: number;
+    top_p?: number;
+    n?: number;
     stream?: boolean;
+    stop?: string | Array<string>;
+    max_tokens?: number;
+    presence_penalty?: number;
+    frequency_penalty?: number;
+    logit_bias?: { [key: string]: number };
+    user?: string;
+    response_format?: { type: "text" | "json_object" };
+    seed?: number;
+    tools?: Array<{ type: "function"; function: any }>;
+    tool_choice?: "none" | "auto" | { type: "function"; function: any };
 }
 
 export interface RelayJob {

@@ -64,6 +64,19 @@ const checkApiKey = (req: express.Request, res: express.Response, next: express.
   next();
 };
 
+// Add OpenAI library compatibility routes
+app.use((req, res, next) => {
+  // Handle legacy /v1/chat/completions path for OpenAI library compatibility
+  if (req.path.startsWith('/v1/chat/completions') && !req.path.startsWith('/openai/')) {
+    req.url = req.url.replace('/v1/chat/completions', '/openai/v1/chat/completions');
+  }
+  // Handle legacy /v1/models path for OpenAI library compatibility
+  if (req.path.startsWith('/v1/models') && !req.path.startsWith('/openai/')) {
+    req.url = req.url.replace('/v1/models', '/openai/v1/models');
+  }
+  next();
+});
+
 app.use(cors({ origin: "*" }));
 app.use(bodyParser.json({ limit: "10mb" }));
 app.use(bodyParser.urlencoded({ extended: true, limit: "10mb" }));
@@ -188,41 +201,153 @@ async function v1ChatCompletionSendJobToClient(clientId: string, ws: any, job: R
   });
 }
 
+// == Direct OpenAI API Endpoints (for library compatibility) ==
+
+// Direct OpenAI chat completions endpoint (for OpenAI library)
+app.post("/v1/chat/completions", checkApiKey, async (req, res) => {
+  // Redirect to the actual OpenAI endpoint
+  req.url = req.url.replace('/v1/chat/completions', '/openai/v1/chat/completions');
+  return app._router.handle(req, res);
+});
+
+// Direct OpenAI models endpoint (for OpenAI library)
+app.get("/v1/models", checkApiKey, async (req, res) => {
+  // Redirect to the actual OpenAI endpoint
+  req.url = req.url.replace('/v1/models', '/openai/v1/models');
+  return app._router.handle(req, res);
+});
+
+// Direct OpenAI model endpoint (for OpenAI library)
+app.get("/v1/models/:model", checkApiKey, async (req, res) => {
+  // Redirect to the actual OpenAI endpoint
+  req.url = req.url.replace('/v1/models/', '/openai/v1/models/');
+  return app._router.handle(req, res);
+});
+
 // == OpenAI-Compatible Streaming Endpoint ==
 app.post("/openai/v1/chat/completions", checkApiKey, async (req, res) => {
   const body = req.body as OpenAIChatRequestBody;
   const id = uuidv4();
-  const job: RelayJob = { id, body, createdAt: Date.now() } as any;
-  const streamMode = !!body.stream;
+  
+  // Ensure all OpenAI required fields are handled
+  const enhancedBody = {
+    ...body,
+    // Make sure we have required fields
+    model: body.model || "gpt-3.5-turbo",
+    messages: body.messages || [],
+    // Handle OpenAI library specific fields
+    temperature: body.temperature !== undefined ? body.temperature : 0.7,
+    top_p: body.top_p !== undefined ? body.top_p : 1,
+    n: body.n || 1,
+    stream: body.stream || false,
+    stop: body.stop || null,
+    max_tokens: body.max_tokens || null,
+    presence_penalty: body.presence_penalty || 0,
+    frequency_penalty: body.frequency_penalty || 0,
+    logit_bias: body.logit_bias || {},
+    user: body.user || null
+  };
+  
+  const job: RelayJob = { id, body: enhancedBody, createdAt: Date.now() } as any;
+  const streamMode = !!enhancedBody.stream;
   const client = wsServer.pickClient(true);
   if (!client) {
-    return res.status(503).json({ error: { message: "No browser extension connected", type: "service_unavailable", code: "no_clients" } });
+    return res.status(503).json({ 
+      error: { 
+        message: "No browser extension connected", 
+        type: "service_unavailable", 
+        code: "no_clients" 
+      } 
+    });
   }
   if (streamMode) {
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
     res.flushHeaders?.();
+    
     let finished = false;
+    let requestStartTime = Math.floor(Date.now() / 1000);
     const timeout = setTimeout(() => {
       if (!finished) {
-        res.write('data: {"error":"timeout"}\n\n');
+        const errorChunk = {
+          id: `chatcmpl-${id}`,
+          object: "chat.completion.chunk",
+          created: requestStartTime,
+          model: enhancedBody.model || "gpt-3.5-turbo",
+          choices: [{
+            index: 0,
+            delta: {},
+            finish_reason: "length"
+          }],
+          error: {
+            message: "Request timeout",
+            type: "timeout",
+            code: "request_timeout"
+          }
+        };
+        res.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
+        res.write('data: [DONE]\n\n');
         res.end();
       }
     }, 180000);
+    
     try {
       await v1ChatCompletionSendJobToClientStreaming(client.id, (client as any).ws, job, (chunk) => {
         if (chunk && chunk.delta) {
-          res.write(`data: ${chunk.delta}\n\n`);
+          // Ensure OpenAI library compatible streaming format
+          const streamChunk = {
+            id: `chatcmpl-${id}`,
+            object: "chat.completion.chunk",
+            created: requestStartTime,
+            model: enhancedBody.model || "gpt-3.5-turbo",
+            choices: [{
+              index: 0,
+              delta: chunk.delta,
+              finish_reason: null
+            }]
+          };
+          res.write(`data: ${JSON.stringify(streamChunk)}\n\n`);
         }
         if (chunk && chunk.done) {
           finished = true;
+          // Send final chunk with finish_reason
+          const finalChunk = {
+            id: `chatcmpl-${id}`,
+            object: "chat.completion.chunk",
+            created: requestStartTime,
+            model: enhancedBody.model || "gpt-3.5-turbo",
+            choices: [{
+              index: 0,
+              delta: {},
+              finish_reason: "stop"
+            }]
+          };
+          res.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
           res.write('data: [DONE]\n\n');
           res.end();
         }
       });
     } catch (e) {
-      res.write('data: {"error":"error"}\n\n');
+      const errorChunk = {
+        id: `chatcmpl-${id}`,
+        object: "chat.completion.chunk",
+        created: requestStartTime,
+        model: enhancedBody.model || "gpt-3.5-turbo",
+        choices: [{
+          index: 0,
+          delta: {},
+          finish_reason: "stop"
+        }],
+        error: {
+          message: (e as Error).message || "Stream error",
+          type: "error",
+          code: "stream_error"
+        }
+      };
+      res.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
+      res.write('data: [DONE]\n\n');
       res.end();
     } finally {
       clearTimeout(timeout);
@@ -231,9 +356,37 @@ app.post("/openai/v1/chat/completions", checkApiKey, async (req, res) => {
   }
   try {
     const result = await v1ChatCompletionSendJobToClient(client.id, (client as any).ws, job);
-    res.json(result);
+    
+    // Ensure OpenAI library compatible response format
+    const openAICompatibleResponse = {
+      id: `chatcmpl-${id}`,
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1000),
+      model: enhancedBody.model || "gpt-3.5-turbo",
+      choices: result.choices || [{
+        index: 0,
+        message: {
+          role: "assistant",
+          content: result.content || ""
+        },
+        finish_reason: result.finish_reason || "stop"
+      }],
+      usage: result.usage || {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0
+      }
+    };
+    
+    res.json(openAICompatibleResponse);
   } catch (err: any) {
-    res.status(504).json({ error: "timeout or relay error", details: String(err) });
+    res.status(504).json({ 
+      error: {
+        message: err.message || "timeout or relay error",
+        type: "timeout",
+        code: "request_timeout"
+      }
+    });
   }
 });
 

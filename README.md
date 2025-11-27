@@ -147,6 +147,53 @@ fetch('http://localhost:8647/openai/v1/chat/completions', {
 });
 ```
 
+### การใช้งานกับ OpenAI Python Library
+
+```python
+from openai import OpenAI
+
+# สร้าง client ที่ชี้ไปยัง API Relay
+client = OpenAI(
+    api_key="your_api_key_here",
+    base_url="http://localhost:8647/openai/v1"
+)
+
+# ส่งข้อความ
+response = client.chat.completions.create(
+    model="gpt-3.5-turbo",
+    messages=[
+        {"role": "user", "content": "Hello, world!"}
+    ]
+)
+
+print(response.choices[0].message.content)
+```
+
+### การใช้งานกับ OpenAI JavaScript Library
+
+```javascript
+import OpenAI from 'openai';
+
+// สร้าง client ที่ชี้ไปยัง API Relay
+const openai = new OpenAI({
+  apiKey: 'your_api_key_here',
+  baseURL: 'http://localhost:8647/openai/v1'
+});
+
+async function main() {
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-3.5-turbo',
+    messages: [
+      { role: 'user', content: 'Hello, world!' }
+    ]
+  });
+
+  console.log(completion.choices[0].message.content);
+}
+
+main();
+```
+
 ### การใช้งานแบบสตรีม (Streaming)
 
 ```javascript
@@ -182,6 +229,59 @@ fetch('http://localhost:8647/openai/v1/chat/completions', {
   
   readStream();
 });
+```
+
+### การใช้งานแบบสตรีมกับ OpenAI Libraries
+
+```python
+# Python - OpenAI Library
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="your_api_key_here",
+    base_url="http://localhost:8647/openai/v1"
+)
+
+stream = client.chat.completions.create(
+    model="gpt-3.5-turbo",
+    messages=[
+        {"role": "user", "content": "Write a story about AI"}
+    ],
+    stream=True
+)
+
+for chunk in stream:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="")
+```
+
+```javascript
+// JavaScript - OpenAI Library
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: 'your_api_key_here',
+  baseURL: 'http://localhost:8647/openai/v1'
+});
+
+async function streamingExample() {
+  const stream = await openai.chat.completions.create({
+    model: 'gpt-3.5-turbo',
+    messages: [
+      { role: 'user', content: 'Write a story about AI' }
+    ],
+    stream: true
+  });
+
+  for await (const chunk of stream) {
+    const content = chunk.choices[0]?.delta?.content;
+    if (content) {
+      process.stdout.write(content);
+    }
+  }
+}
+
+streamingExample();
 ```
 
 ## API Documentation
