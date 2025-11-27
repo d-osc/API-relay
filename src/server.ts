@@ -16,52 +16,56 @@ const checkApiKey = (req: express.Request, res: express.Response, next: express.
   // Skip API key check for health, ping, admin and API key management endpoints
   const skipAuthPaths = ['/ping', '/health', '/admin', '/api-keys'];
   const isSkipPath = skipAuthPaths.some(path => req.path.startsWith(path));
-  
+
   if (isSkipPath) {
     return next();
   }
-  
+
+
   // Check for Authorization header
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (!authHeader) {
+    next();
+  } else if (!authHeader.startsWith('Bearer ')) {
     return res.status(401).json({
       error: {
-        message: "Missing or invalid Authorization header. Expected format: 'Authorization: Bearer <API_KEY>'",
+        message: "Missing or invalid Authorization header",
         type: "authentication_error",
-        code: "invalid_api_key"
+        code: "invalid_authorization_header"
       }
     });
+  } else {
+
+    // Extract the token (API key)
+    const apiKey = authHeader.substring(7); // Remove 'Bearer ' prefix
+
+    if (!apiKey) {
+      return res.status(401).json({
+        error: {
+          message: "Invalid API key format",
+          type: "authentication_error",
+          code: "invalid_api_key"
+        }
+      });
+    }
+
+    // Check if it's a generated API key
+    const validApiKey = apiKeyManager.validateApiKey(apiKey);
+
+    if (!validApiKey) {
+      return res.status(401).json({
+        error: {
+          message: "Invalid or expired API key",
+          type: "authentication_error",
+          code: "invalid_api_key"
+        }
+      });
+    }
+
+    // Store API key info in request for potential future use
+    (req as any).apiKey = validApiKey;
+    next();
   }
-  
-  // Extract the token (API key)
-  const apiKey = authHeader.substring(7); // Remove 'Bearer ' prefix
-  
-  if (!apiKey) {
-    return res.status(401).json({
-      error: {
-        message: "Invalid API key format",
-        type: "authentication_error", 
-        code: "invalid_api_key"
-      }
-    });
-  }
-  
-  // Check if it's a generated API key
-  const validApiKey = apiKeyManager.validateApiKey(apiKey);
-  
-  if (!validApiKey) {
-    return res.status(401).json({
-      error: {
-        message: "Invalid or expired API key",
-        type: "authentication_error", 
-        code: "invalid_api_key"
-      }
-    });
-  }
-  
-  // Store API key info in request for potential future use
-  (req as any).apiKey = validApiKey;
-  next();
 };
 
 // Add OpenAI library compatibility routes
@@ -145,7 +149,7 @@ async function v1ChatCompletionSendJobToClientStreaming(clientId: string, ws: an
         const msg = typeof data === "string" ? JSON.parse(data) : JSON.parse(data.toString());
         if (msg.type === "relay_response_v1_chat_completions_stream" && msg.id === id) {
           if (msg.data.includes("[DONE]")) {
-           console.log('SERVER: received relay_response_v1_chat_completions_stream done, will close stream');
+            console.log('SERVER: received relay_response_v1_chat_completions_stream done, will close stream');
             cleanup();
             onChunk?.({ done: true });
             resolve();
@@ -225,52 +229,112 @@ app.get("/v1/models/:model", checkApiKey, async (req, res) => {
 });
 
 // == OpenAI-Compatible Streaming Endpoint ==
-app.post("/openai/v1/chat/completions", checkApiKey, async (req, res) => {
+app.post("/:org/v1/chat/completions", checkApiKey, async (req, res) => {
   const body = req.body as OpenAIChatRequestBody;
   const id = uuidv4();
-  
-  // Ensure all OpenAI required fields are handled
-  const enhancedBody = {
-    ...body,
-    // Make sure we have required fields
-    model: body.model || "gpt-3.5-turbo",
-    messages: body.messages || [],
-    // Handle OpenAI library specific fields
-    temperature: body.temperature !== undefined ? body.temperature : 0.7,
-    top_p: body.top_p !== undefined ? body.top_p : 1,
-    n: body.n || 1,
-    stream: body.stream || false,
-    stop: body.stop || null,
-    max_tokens: body.max_tokens || null,
-    presence_penalty: body.presence_penalty || 0,
-    frequency_penalty: body.frequency_penalty || 0,
-    logit_bias: body.logit_bias || {},
-    user: body.user || null
-  };
-  
-  const job: RelayJob = { id, body: enhancedBody, createdAt: Date.now() } as any;
-  const streamMode = !!enhancedBody.stream;
-  const client = wsServer.pickClient(true);
-  if (!client) {
-    return res.status(503).json({ 
-      error: { 
-        message: "No browser extension connected", 
-        type: "service_unavailable", 
-        code: "no_clients" 
-      } 
-    });
-  }
-  if (streamMode) {
-    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.flushHeaders?.();
-    
-    let finished = false;
-    let requestStartTime = Math.floor(Date.now() / 1000);
-    const timeout = setTimeout(() => {
-      if (!finished) {
+
+  if (['openai', 'copilot'].includes(req.params.org.toLowerCase())) {
+    // Ensure all OpenAI required fields are handled
+    const enhancedBody = {
+      ...body,
+      // Make sure we have required fields
+      model: body.model || "gpt-3.5-turbo",
+      messages: body.messages || [],
+      // Handle OpenAI library specific fields
+      temperature: body.temperature !== undefined ? body.temperature : 0.7,
+      top_p: body.top_p !== undefined ? body.top_p : 1,
+      n: body.n || 1,
+      stream: body.stream || false,
+      stop: body.stop || null,
+      max_tokens: body.max_tokens || null,
+      presence_penalty: body.presence_penalty || 0,
+      frequency_penalty: body.frequency_penalty || 0,
+      logit_bias: body.logit_bias || {},
+      user: body.user || null
+    };
+
+    const job: RelayJob = { id, body: enhancedBody, createdAt: Date.now() } as any;
+    const streamMode = !!enhancedBody.stream;
+    const client = wsServer.pickClient(true);
+    if (!client) {
+      return res.status(503).json({
+        error: {
+          message: "No browser extension connected",
+          type: "service_unavailable",
+          code: "no_clients"
+        }
+      });
+    }
+    if (streamMode) {
+      res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.flushHeaders?.();
+
+      let finished = false;
+      let requestStartTime = Math.floor(Date.now() / 1000);
+      const timeout = setTimeout(() => {
+        if (!finished) {
+          const errorChunk = {
+            id: `chatcmpl-${id}`,
+            object: "chat.completion.chunk",
+            created: requestStartTime,
+            model: enhancedBody.model || "gpt-3.5-turbo",
+            choices: [{
+              index: 0,
+              delta: {},
+              finish_reason: "length"
+            }],
+            error: {
+              message: "Request timeout",
+              type: "timeout",
+              code: "request_timeout"
+            }
+          };
+          res.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
+          res.write('data: [DONE]\n\n');
+          res.end();
+        }
+      }, 180000);
+
+      try {
+        await v1ChatCompletionSendJobToClientStreaming(client.id, (client as any).ws, job, (chunk) => {
+          if (chunk && chunk.delta) {
+            // Ensure OpenAI library compatible streaming format
+            const streamChunk = {
+              id: `chatcmpl-${id}`,
+              object: "chat.completion.chunk",
+              created: requestStartTime,
+              model: enhancedBody.model || "gpt-3.5-turbo",
+              choices: [{
+                index: 0,
+                delta: chunk.delta,
+                finish_reason: null
+              }]
+            };
+            res.write(`data: ${JSON.stringify(streamChunk)}\n\n`);
+          }
+          if (chunk && chunk.done) {
+            finished = true;
+            // Send final chunk with finish_reason
+            const finalChunk = {
+              id: `chatcmpl-${id}`,
+              object: "chat.completion.chunk",
+              created: requestStartTime,
+              model: enhancedBody.model || "gpt-3.5-turbo",
+              choices: [{
+                index: 0,
+                delta: {},
+                finish_reason: "stop"
+              }]
+            };
+            res.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+          }
+        });
+      } catch (e) {
         const errorChunk = {
           id: `chatcmpl-${id}`,
           object: "chat.completion.chunk",
@@ -279,112 +343,62 @@ app.post("/openai/v1/chat/completions", checkApiKey, async (req, res) => {
           choices: [{
             index: 0,
             delta: {},
-            finish_reason: "length"
+            finish_reason: "stop"
           }],
           error: {
-            message: "Request timeout",
-            type: "timeout",
-            code: "request_timeout"
+            message: (e as Error).message || "Stream error",
+            type: "error",
+            code: "stream_error"
           }
         };
         res.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
         res.write('data: [DONE]\n\n');
         res.end();
+      } finally {
+        clearTimeout(timeout);
       }
-    }, 180000);
-    
+      return;
+    }
     try {
-      await v1ChatCompletionSendJobToClientStreaming(client.id, (client as any).ws, job, (chunk) => {
-        if (chunk && chunk.delta) {
-          // Ensure OpenAI library compatible streaming format
-          const streamChunk = {
-            id: `chatcmpl-${id}`,
-            object: "chat.completion.chunk",
-            created: requestStartTime,
-            model: enhancedBody.model || "gpt-3.5-turbo",
-            choices: [{
-              index: 0,
-              delta: chunk.delta,
-              finish_reason: null
-            }]
-          };
-          res.write(`data: ${JSON.stringify(streamChunk)}\n\n`);
-        }
-        if (chunk && chunk.done) {
-          finished = true;
-          // Send final chunk with finish_reason
-          const finalChunk = {
-            id: `chatcmpl-${id}`,
-            object: "chat.completion.chunk",
-            created: requestStartTime,
-            model: enhancedBody.model || "gpt-3.5-turbo",
-            choices: [{
-              index: 0,
-              delta: {},
-              finish_reason: "stop"
-            }]
-          };
-          res.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
-          res.write('data: [DONE]\n\n');
-          res.end();
-        }
-      });
-    } catch (e) {
-      const errorChunk = {
+      const result = await v1ChatCompletionSendJobToClient(client.id, (client as any).ws, job);
+
+      // Ensure OpenAI library compatible response format
+      const openAICompatibleResponse = {
         id: `chatcmpl-${id}`,
-        object: "chat.completion.chunk",
-        created: requestStartTime,
+        object: "chat.completion",
+        created: Math.floor(Date.now() / 1000),
         model: enhancedBody.model || "gpt-3.5-turbo",
-        choices: [{
+        choices: result.choices || [{
           index: 0,
-          delta: {},
-          finish_reason: "stop"
+          message: {
+            role: "assistant",
+            content: result.content || ""
+          },
+          finish_reason: result.finish_reason || "stop"
         }],
-        error: {
-          message: (e as Error).message || "Stream error",
-          type: "error",
-          code: "stream_error"
+        usage: result.usage || {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0
         }
       };
-      res.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
-    } finally {
-      clearTimeout(timeout);
+
+      res.json(openAICompatibleResponse);
+    } catch (err: any) {
+      res.status(504).json({
+        error: {
+          message: err.message || "timeout or relay error",
+          type: "timeout",
+          code: "request_timeout"
+        }
+      });
     }
-    return;
-  }
-  try {
-    const result = await v1ChatCompletionSendJobToClient(client.id, (client as any).ws, job);
-    
-    // Ensure OpenAI library compatible response format
-    const openAICompatibleResponse = {
-      id: `chatcmpl-${id}`,
-      object: "chat.completion",
-      created: Math.floor(Date.now() / 1000),
-      model: enhancedBody.model || "gpt-3.5-turbo",
-      choices: result.choices || [{
-        index: 0,
-        message: {
-          role: "assistant",
-          content: result.content || ""
-        },
-        finish_reason: result.finish_reason || "stop"
-      }],
-      usage: result.usage || {
-        prompt_tokens: 0,
-        completion_tokens: 0,
-        total_tokens: 0
-      }
-    };
-    
-    res.json(openAICompatibleResponse);
-  } catch (err: any) {
-    res.status(504).json({ 
+  } else {
+    return res.status(403).json({
       error: {
-        message: err.message || "timeout or relay error",
-        type: "timeout",
-        code: "request_timeout"
+        message: "Forbidden",
+        type: "forbidden",
+        code: "forbidden"
       }
     });
   }
@@ -407,14 +421,14 @@ async function v1MessageSendJobToClientStreaming(clientId: string, ws: any, job:
       try {
         const msg = typeof data === "string" ? JSON.parse(data) : JSON.parse(data.toString());
         if (msg.type === "relay_response_v1_messages_stream" && msg.id === id) {
-         console.log('SERVER: received relay_response_v1_messages_stream message data:', msg.data);
+          console.log('SERVER: received relay_response_v1_messages_stream message data:', msg.data);
           if (msg.data.includes("[DONE]")) {
-           console.log('SERVER: received relay_response_v1_messages_stream done, will close stream');
+            console.log('SERVER: received relay_response_v1_messages_stream done, will close stream');
             cleanup();
             onChunk?.({ done: true });
             resolve();
           } else if (msg.data) {
-           console.log('SERVER: received relay_response_v1_messages_stream delta:', msg.data);
+            console.log('SERVER: received relay_response_v1_messages_stream delta:', msg.data);
             onChunk?.({ delta: msg.data });
           }
         }
@@ -492,7 +506,7 @@ app.post("/anthropic/v1/messages", checkApiKey, async (req, res) => {
     try {
       await v1MessageSendJobToClientStreaming(client.id, (client as any).ws, job, (chunk) => {
         if (chunk && chunk.delta) {
-         console.log('SERVER: sending chunk delta:', chunk.delta);
+          console.log('SERVER: sending chunk delta:', chunk.delta);
           res.write(`event: content_block_delta\ndata: ${JSON.stringify({
             type: "content_block_delta",
             index: 0,
@@ -545,7 +559,7 @@ app.get("/health", (_req, res) => {
 async function getModelFromClient(clientId: string, ws: any, job: RelayJob): Promise<any> {
   const id = job.id;
   const payload = { type: "relay_request_v1_models", id, body: job.body };
- console.log('Sending payload to client:', payload);
+  console.log('Sending payload to client:', payload);
   wsServer.setClientBusy(clientId, true);
   const timeoutMs = settings.requestTimeoutMs || 180000;
   return new Promise((resolve, reject) => {
@@ -612,7 +626,19 @@ app.get("/:org/v1/models/:modelId", checkApiKey, async (req, res) => {
           "display_name": m.title,
           "type": "model"
         });
-
+      case 'copilot':
+        return res.json({
+          "id": m.id,
+          "name": m.title,
+          "toolCalling": true,
+          "vision": true,
+          "maxInputTokens": 16000,
+          "maxOutputTokens": 16000
+        });
+      case 'google':
+        return res.status(501).json({
+          error: { message: "Google API not yet implemented", type: "not_implemented", code: "not_implemented" }
+        });
       default:
         return res.status(403).json({ error: { message: `Organization ${org} not found`, type: "forbidden", code: "org_not_found" } });
     }
@@ -660,6 +686,17 @@ app.get("/:org/v1/models", checkApiKey, async (req, res) => {
           "has_more": true,
           "last_id": "last_id"
         });
+      case "copilot":
+        return res.json({
+          "data": result.map((item: any) => ({
+            "id": item.id,
+            "name": item.title,
+            "toolCalling": true,
+            "vision": true,
+            "maxInputTokens": 16000,
+            "maxOutputTokens": 16000
+          }))
+        });
       case "google":
         return res.status(501).json({ error: { message: "Google API not yet implemented", type: "not_implemented", code: "not_implemented" } });
       default:
@@ -679,7 +716,7 @@ app.get("/:org/v1/models", checkApiKey, async (req, res) => {
 app.post("/api-keys", express.json(), (req, res) => {
   try {
     const { name, expiresInDays } = req.body;
-    
+
     if (!name || typeof name !== 'string') {
       return res.status(400).json({
         error: {
@@ -689,7 +726,7 @@ app.post("/api-keys", express.json(), (req, res) => {
         }
       });
     }
-    
+
     // expiresInDays is optional - if not provided, API key will not expire
     if (expiresInDays !== undefined && (typeof expiresInDays !== 'number' || expiresInDays <= 0)) {
       return res.status(400).json({
@@ -700,9 +737,9 @@ app.post("/api-keys", express.json(), (req, res) => {
         }
       });
     }
-    
+
     const apiKey = apiKeyManager.generateApiKey(name, expiresInDays);
-    
+
     res.status(201).json({
       id: apiKey.id,
       name: apiKey.name,
@@ -746,13 +783,13 @@ app.put("/api-keys/:id", express.json(), (req, res) => {
   try {
     const { id } = req.params;
     const { name, expiresAt } = req.body;
-    
+
     const updates: any = {};
     if (name !== undefined) updates.name = name;
     if (expiresAt !== undefined) updates.expiresAt = expiresAt;
-    
+
     const apiKey = apiKeyManager.updateApiKey(id, updates);
-    
+
     if (!apiKey) {
       return res.status(404).json({
         error: {
@@ -762,7 +799,7 @@ app.put("/api-keys/:id", express.json(), (req, res) => {
         }
       });
     }
-    
+
     res.json({
       id: apiKey.id,
       name: apiKey.name,
@@ -785,9 +822,9 @@ app.put("/api-keys/:id", express.json(), (req, res) => {
 app.delete("/api-keys/:id", (req, res) => {
   try {
     const { id } = req.params;
-    
+
     const success = apiKeyManager.revokeApiKey(id);
-    
+
     if (!success) {
       return res.status(404).json({
         error: {
@@ -797,7 +834,7 @@ app.delete("/api-keys/:id", (req, res) => {
         }
       });
     }
-    
+
     res.json({ success: true, message: "API key revoked successfully" });
   } catch (error: any) {
     res.status(500).json({
