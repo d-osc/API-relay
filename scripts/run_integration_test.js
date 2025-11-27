@@ -6,7 +6,7 @@ async function waitForClient(timeoutMs = 10000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
-      const r = await fetch('http://localhost:3000/admin/status');
+      const r = await fetch('http://localhost:8647/admin/status');
       const j = await r.json();
       if (j.ws && j.ws.clientCount && j.ws.clientCount > 0) return true;
     } catch (e) {
@@ -30,7 +30,7 @@ async function waitForClient(timeoutMs = 10000) {
 
     console.log('Mock client connected — sending test request to /v1/messages');
 
-    const resp = await fetch('http://localhost:3000/v1/messages', {
+    const resp = await fetch('http://localhost:8647/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'claude-2', messages: [{ author: 'user', content: 'Hello from automated test' }] }),

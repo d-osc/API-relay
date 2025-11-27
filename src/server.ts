@@ -7,8 +7,63 @@ import RelayWSServer from "./ws";
 import RequestQueue from "./queue";
 import { OpenAIChatRequestBody, RelayJob } from "./types.d";
 import settingsModule from "./settings";
+import apiKeyManager from "./apiKeys";
 
 const app = express();
+
+// Middleware to check API key (accepts both OpenAI API key and generated API keys)
+const checkApiKey = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  // Skip API key check for health, ping, admin and API key management endpoints
+  const skipAuthPaths = ['/ping', '/health', '/admin', '/api-keys'];
+  const isSkipPath = skipAuthPaths.some(path => req.path.startsWith(path));
+  
+  if (isSkipPath) {
+    return next();
+  }
+  
+  // Check for Authorization header
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({
+      error: {
+        message: "Missing or invalid Authorization header. Expected format: 'Authorization: Bearer <API_KEY>'",
+        type: "authentication_error",
+        code: "invalid_api_key"
+      }
+    });
+  }
+  
+  // Extract the token (API key)
+  const apiKey = authHeader.substring(7); // Remove 'Bearer ' prefix
+  
+  if (!apiKey) {
+    return res.status(401).json({
+      error: {
+        message: "Invalid API key format",
+        type: "authentication_error", 
+        code: "invalid_api_key"
+      }
+    });
+  }
+  
+  // Check if it's a generated API key
+  const validApiKey = apiKeyManager.validateApiKey(apiKey);
+  
+  if (!validApiKey) {
+    return res.status(401).json({
+      error: {
+        message: "Invalid or expired API key",
+        type: "authentication_error", 
+        code: "invalid_api_key"
+      }
+    });
+  }
+  
+  // Store API key info in request for potential future use
+  (req as any).apiKey = validApiKey;
+  next();
+};
+
 app.use(cors({ origin: "*" }));
 app.use(bodyParser.json({ limit: "10mb" }));
 app.use(bodyParser.urlencoded({ extended: true, limit: "10mb" }));
@@ -134,7 +189,7 @@ async function v1ChatCompletionSendJobToClient(clientId: string, ws: any, job: R
 }
 
 // == OpenAI-Compatible Streaming Endpoint ==
-app.post("/openai/v1/chat/completions", async (req, res) => {
+app.post("/openai/v1/chat/completions", checkApiKey, async (req, res) => {
   const body = req.body as OpenAIChatRequestBody;
   const id = uuidv4();
   const job: RelayJob = { id, body, createdAt: Date.now() } as any;
@@ -259,7 +314,7 @@ async function v1MessageSendJobToClient(clientId: string, ws: any, job: RelayJob
   });
 }
 
-app.post("/anthropic/v1/messages", async (req, res) => {
+app.post("/anthropic/v1/messages", checkApiKey, async (req, res) => {
   const anthropicBody = req.body;
   const normalized = normalizeAnthropicRequest(anthropicBody);
   const id = uuidv4();
@@ -372,7 +427,7 @@ async function getModelFromClient(clientId: string, ws: any, job: RelayJob): Pro
   });
 }
 
-app.get("/:org/v1/models/:modelId", async (req, res) => {
+app.get("/:org/v1/models/:modelId", checkApiKey, async (req, res) => {
   const { org, modelId } = req.params;
 
   const id = uuidv4();
@@ -417,7 +472,7 @@ app.get("/:org/v1/models/:modelId", async (req, res) => {
   }
 });
 
-app.get("/:org/v1/models", async (req, res) => {
+app.get("/:org/v1/models", checkApiKey, async (req, res) => {
   const { org } = req.params;
 
   const id = uuidv4();
@@ -465,17 +520,155 @@ app.get("/:org/v1/models", async (req, res) => {
   }
 });
 
+// == API Key Management Endpoints ==
+
+// Generate new API key
+app.post("/api-keys", express.json(), (req, res) => {
+  try {
+    const { name, expiresInDays } = req.body;
+    
+    if (!name || typeof name !== 'string') {
+      return res.status(400).json({
+        error: {
+          message: "API key name is required",
+          type: "invalid_request_error",
+          code: "missing_parameter"
+        }
+      });
+    }
+    
+    // expiresInDays is optional - if not provided, API key will not expire
+    if (expiresInDays !== undefined && (typeof expiresInDays !== 'number' || expiresInDays <= 0)) {
+      return res.status(400).json({
+        error: {
+          message: "expiresInDays must be a positive number",
+          type: "invalid_request_error",
+          code: "invalid_parameter"
+        }
+      });
+    }
+    
+    const apiKey = apiKeyManager.generateApiKey(name, expiresInDays);
+    
+    res.status(201).json({
+      id: apiKey.id,
+      name: apiKey.name,
+      key: apiKey.key,
+      createdAt: apiKey.createdAt,
+      expiresAt: apiKey.expiresAt,
+      message: expiresInDays ? `API key expires in ${expiresInDays} days` : "API key does not expire"
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      error: {
+        message: error.message || "Failed to generate API key",
+        type: "api_error",
+        code: "internal_error"
+      }
+    });
+  }
+});
+
+// List all API keys (without the actual keys)
+app.get("/api-keys", (req, res) => {
+  try {
+    const apiKeys = apiKeyManager.listApiKeys();
+    res.json({
+      apiKeys,
+      count: apiKeys.length
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      error: {
+        message: error.message || "Failed to list API keys",
+        type: "api_error",
+        code: "internal_error"
+      }
+    });
+  }
+});
+
+// Update API key
+app.put("/api-keys/:id", express.json(), (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, expiresAt } = req.body;
+    
+    const updates: any = {};
+    if (name !== undefined) updates.name = name;
+    if (expiresAt !== undefined) updates.expiresAt = expiresAt;
+    
+    const apiKey = apiKeyManager.updateApiKey(id, updates);
+    
+    if (!apiKey) {
+      return res.status(404).json({
+        error: {
+          message: "API key not found",
+          type: "not_found_error",
+          code: "api_key_not_found"
+        }
+      });
+    }
+    
+    res.json({
+      id: apiKey.id,
+      name: apiKey.name,
+      createdAt: apiKey.createdAt,
+      lastUsed: apiKey.lastUsed,
+      expiresAt: apiKey.expiresAt
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      error: {
+        message: error.message || "Failed to update API key",
+        type: "api_error",
+        code: "internal_error"
+      }
+    });
+  }
+});
+
+// Revoke API key
+app.delete("/api-keys/:id", (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const success = apiKeyManager.revokeApiKey(id);
+    
+    if (!success) {
+      return res.status(404).json({
+        error: {
+          message: "API key not found",
+          type: "not_found_error",
+          code: "api_key_not_found"
+        }
+      });
+    }
+    
+    res.json({ success: true, message: "API key revoked successfully" });
+  } catch (error: any) {
+    res.status(500).json({
+      error: {
+        message: error.message || "Failed to revoke API key",
+        type: "api_error",
+        code: "internal_error"
+      }
+    });
+  }
+});
+
 // == Start server ==
-const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
+const PORT = process.env.PORT ? Number(process.env.PORT) : 8647;
 server.listen(PORT, () => {
-  console.log("═".repeat(60));
+  console.log("=".repeat(60));
   console.log(`🚀 Chat Relay API Server`);
-  console.log("═".repeat(60));
+  console.log("=".repeat(60));
   console.log(`📡 HTTP API:       http://localhost:${PORT}`);
   console.log(`🔌 WebSocket:      ws://localhost:${PORT}/ws`);
   console.log(`⚙️  Admin UI:      http://localhost:${PORT}/admin`);
   console.log(`❤️  Health Check:  http://localhost:${PORT}/health`);
-  console.log("═".repeat(60));
+  console.log(`🔑 API Keys:      http://localhost:${PORT}/api-keys`);
+  console.log("=".repeat(60));
 });
 
 export default app;

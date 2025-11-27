@@ -12,6 +12,8 @@
     let messageHandlers = new Map();
     let currentRelayRequestId = null;
     let doneSent = false; // ป้องกัน DONE ซ้ำ
+    let streamTimeoutId = null; // Timeout for streaming requests
+    let streamActivityTimer = null; // Timer to detect stream inactivity
 
     function log(level, ...args) {
         const prefix = `[ChatRelay Content][${location.hostname}]`;
@@ -25,7 +27,7 @@
             messageHandlers.set(id, { resolve, reject, timestamp: Date.now() });
             log("info", `Sending to main world: ${type} (id: ${id})`, data);
             window.postMessage({ type, id, ...data }, '*');
-            const timeout = type === 'RELAY_CAPTURE_RESPONSE_V1_CHAT_COMPLETIONS' || type === 'RELAY_CAPTURE_RESPONSE_V1_MESSAGES' || type === 'RELAY_CAPTURE_RESPONSE_V1_MODELS' ? CONFIG.COMM_TIMEOUT : 4000;
+            const timeout = type === 'RELAY_CAPTURE_RESPONSE_V1_CHAT_COMPLETIONS' || type === 'RELAY_CAPTURE_RESPONSE_V1_MESSAGES' || type === 'RELAY_CAPTURE_RESPONSE_V1_MODELS' ? CONFIG.COMM_TIMEOUT : 18000;
             setTimeout(() => {
                 if (messageHandlers.has(id)) {
                     messageHandlers.delete(id);
@@ -50,19 +52,37 @@
 
         if (event.data.type === 'RELAY_RESPONSE_V1_CHAT_COMPLETIONS_STREAM') {
             if (currentRelayRequestId && isProcessing) {
+                // Reset activity timer when we receive data
+                resetStreamActivityTimer();
+                
                 chrome.runtime.sendMessage({
                     type: 'relay_response_v1_chat_completions_stream',
                     id: currentRelayRequestId,
                     data: event.data.data
                 });
+                
+                // Check if stream is done and reset processing state
+                if (event.data.data && event.data.data.includes('[DONE]')) {
+                    log('info', 'Stream completed, resetting processing state');
+                    resetProcessingState();
+                }
             }
         } else if (event.data.type === 'RELAY_RESPONSE_V1_MESSAGES_STREAM') {
             if (currentRelayRequestId && isProcessing) {
+                // Reset activity timer when we receive data
+                resetStreamActivityTimer();
+                
                 chrome.runtime.sendMessage({
                     type: 'relay_response_v1_messages_stream',
                     id: currentRelayRequestId,
                     data: event.data.data
                 });
+                
+                // Check if stream is done and reset processing state
+                if (event.data.data && event.data.data.includes('[DONE]')) {
+                    log('info', 'Stream completed, resetting processing state');
+                    resetProcessingState();
+                }
             }
         } else if (event.data.type === 'RELAY_RESPONSE_V1_CHAT_COMPLETIONS') {
             if (currentRelayRequestId && isProcessing) {
@@ -117,14 +137,49 @@
         }
     });
 
+    // Function to reset processing state
+    function resetProcessingState() {
+        isProcessing = false;
+        currentRelayRequestId = null;
+        doneSent = false;
+        if (streamTimeoutId) {
+            clearTimeout(streamTimeoutId);
+            streamTimeoutId = null;
+        }
+        if (streamActivityTimer) {
+            clearTimeout(streamActivityTimer);
+            streamActivityTimer = null;
+        }
+        log('info', 'Processing state reset');
+    }
+
+    // Function to reset stream activity timer (5 second inactivity timeout)
+    function resetStreamActivityTimer() {
+        if (streamActivityTimer) {
+            clearTimeout(streamActivityTimer);
+        }
+        
+        streamActivityTimer = setTimeout(() => {
+            if (isProcessing) {
+                log('warn', 'Stream inactive for 5 seconds, resetting processing state');
+                resetProcessingState();
+            }
+        }, 15000); // 15 seconds
+    }
+
     // --- Main Task Handler ---
     async function handleRelayRequest(msg) {
         log('info', 'Handling relay msg:', msg);
-        if (isProcessing) throw new Error('Provider is currently processing another request');
+        // if (isProcessing) throw new Error('Provider is currently processing another request');
         isProcessing = true;
         doneSent = false;
         currentRelayRequestId = msg.id;
         log('info', 'Processing relay request:', msg.id);
+        
+        // For streaming requests, set up inactivity detection
+        if (msg.stream) {
+            resetStreamActivityTimer();
+        }
 
         try {
 
@@ -209,10 +264,9 @@
             log('error', 'Request handling failed:', error);
             throw error;
         } finally {
-            // isProcessing = false; // ปล่อยให้จบที่ DONE (stream mode) กรณี non-stream จะจบตรงนี้
-            if (!stream) {
-                isProcessing = false;
-                currentRelayRequestId = null;
+            // Reset processing state for non-stream requests
+            if (!msg.stream) {
+                resetProcessingState();
             }
             log('info', 'Request processing completed');
         }

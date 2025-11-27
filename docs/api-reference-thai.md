@@ -9,7 +9,7 @@
 ### พื้นฐาน URL
 
 ```
-http://localhost:3000
+http://localhost:8647
 ```
 
 ### ส่วนหัวที่จำเป็น (Required Headers)
@@ -424,7 +424,7 @@ const fetch = require('node-fetch');
 // สร้างการสนทนาใหม่
 async function createChatCompletion(messages) {
   try {
-    const response = await fetch('http://localhost:3000/v1/chat/completions', {
+    const response = await fetch('http://localhost:8647/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -470,7 +470,7 @@ import json
 
 # สร้างการสนทนาใหม่
 def create_chat_completion(messages):
-    url = "http://localhost:3000/v1/chat/completions"
+    url = "http://localhost:8647/v1/chat/completions"
     
     payload = {
         "model": "gpt-3.5-turbo",
@@ -514,7 +514,7 @@ except Exception as e:
 
 ```bash
 # สร้างการสนทนาใหม่
-curl -X POST http://localhost:3000/v1/chat/completions \
+curl -X POST http://localhost:8647/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-3.5-turbo",
@@ -542,7 +542,7 @@ const fetch = require('node-fetch');
 
 async function createStreamingChatCompletion(messages) {
   try {
-    const response = await fetch('http://localhost:3000/v1/chat/completions', {
+    const response = await fetch('http://localhost:8647/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

@@ -3,3 +3,5 @@ dist/
 .env
 /.vscode
 *.log
+api.keys.json
+relay.settings.json
